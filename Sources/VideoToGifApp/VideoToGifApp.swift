@@ -8,7 +8,7 @@ struct VideoToGifMacApp: App {
     var body: some Scene {
         WindowGroup("Video2GIF") {
             ContentView()
-                .frame(minWidth: 560, minHeight: 420)
+                .frame(width: 760, height: 580)
         }
     }
 }
@@ -45,9 +45,6 @@ struct ContentView: View {
                 Text("Convert local videos up to 1 GB into shareable GIFs.")
                     .foregroundStyle(.secondary)
             }
-            Spacer()
-            startButton
-                .controlSize(.large)
         }
     }
 
