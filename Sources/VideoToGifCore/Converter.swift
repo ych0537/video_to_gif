@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreGraphics
+import Darwin
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -34,6 +35,53 @@ public enum VideoToGifError: Error, CustomStringConvertible, Sendable {
         switch self {
         case .message(let text):
             return text
+        }
+    }
+}
+
+public final class ConversionController: @unchecked Sendable {
+    private let lock = NSLock()
+    private var paused = false
+    private var cancelled = false
+
+    public init() {}
+
+    public func pause() {
+        lock.withLock {
+            paused = true
+        }
+    }
+
+    public func resume() {
+        lock.withLock {
+            paused = false
+        }
+    }
+
+    public func cancel() {
+        lock.withLock {
+            cancelled = true
+            paused = false
+        }
+    }
+
+    public var isPaused: Bool {
+        lock.withLock { paused }
+    }
+
+    public var isCancelled: Bool {
+        lock.withLock { cancelled }
+    }
+
+    func waitIfPaused() throws {
+        while true {
+            if isCancelled {
+                throw VideoToGifError.message("Conversion cancelled")
+            }
+            if !isPaused {
+                return
+            }
+            Thread.sleep(forTimeInterval: 0.1)
         }
     }
 }
@@ -89,6 +137,7 @@ public func hasHalfSecondPrecision(_ seconds: Double) -> Bool {
 
 public func convertVideoToGif(
     options: ConversionOptions,
+    controller: ConversionController? = nil,
     progress: @Sendable (ConversionProgress) -> Void = { _ in }
 ) throws {
     try validateConversionOptions(options)
@@ -97,12 +146,12 @@ public func convertVideoToGif(
     let outputURL = URL(fileURLWithPath: options.output)
 
     if let ffmpegPath = findExecutable(named: "ffmpeg") {
-        try convertVideoToGifWithFFmpeg(options: options, ffmpegPath: ffmpegPath, inputURL: inputURL, outputURL: outputURL, progress: progress)
+        try convertVideoToGifWithFFmpeg(options: options, ffmpegPath: ffmpegPath, inputURL: inputURL, outputURL: outputURL, controller: controller, progress: progress)
         return
     }
 
     progress(.message("ffmpeg not found; using macOS native video reader. Some formats such as webm, mkv, flv, and wmv may require ffmpeg."))
-    try convertVideoToGifWithAVFoundation(options: options, inputURL: inputURL, outputURL: outputURL, progress: progress)
+    try convertVideoToGifWithAVFoundation(options: options, inputURL: inputURL, outputURL: outputURL, controller: controller, progress: progress)
 }
 
 func resizedImage(_ image: CGImage, maxWidth: Int) throws -> CGImage {
@@ -146,6 +195,7 @@ func convertVideoToGifWithAVFoundation(
     options: ConversionOptions,
     inputURL: URL,
     outputURL: URL,
+    controller: ConversionController?,
     progress: @Sendable (ConversionProgress) -> Void
 ) throws {
     let asset = AVURLAsset(url: inputURL)
@@ -192,6 +242,7 @@ func convertVideoToGifWithAVFoundation(
     progress(.message("Settings: \(options.width) px, \(options.fps) fps, start \(String(format: "%.1f", options.start))s, duration \(String(format: "%.2f", clipDuration))s"))
 
     for frameIndex in 0..<frameCount {
+        try controller?.waitIfPaused()
         autoreleasepool {
             do {
                 let lastFrameOffset = max(0, clipDuration - 0.001)
@@ -227,6 +278,7 @@ func convertVideoToGifWithFFmpeg(
     ffmpegPath: String,
     inputURL: URL,
     outputURL: URL,
+    controller: ConversionController?,
     progress: @Sendable (ConversionProgress) -> Void
 ) throws {
     let paletteURL = FileManager.default.temporaryDirectory
@@ -242,6 +294,7 @@ func convertVideoToGifWithFFmpeg(
     progress(.message("Generating palette..."))
     try runProcess(
         executable: ffmpegPath,
+        controller: controller,
         arguments: ["-y"] + startArgs + durationArgs + [
             "-i", inputURL.path,
             "-vf", "\(scaleFilter),palettegen",
@@ -253,6 +306,7 @@ func convertVideoToGifWithFFmpeg(
     progress(.message("Rendering GIF..."))
     try runProcess(
         executable: ffmpegPath,
+        controller: controller,
         arguments: ["-y"] + startArgs + durationArgs + [
             "-i", inputURL.path,
             "-i", paletteURL.path,
@@ -270,7 +324,7 @@ func convertVideoToGifWithFFmpeg(
     progress(.message("Done: \(formatBytes(bytes))"))
 }
 
-func runProcess(executable: String, arguments: [String]) throws {
+func runProcess(executable: String, controller: ConversionController?, arguments: [String]) throws {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = arguments
@@ -280,12 +334,40 @@ func runProcess(executable: String, arguments: [String]) throws {
     process.standardError = pipe
 
     try process.run()
-    process.waitUntilExit()
+
+    var sentStop = false
+    while process.isRunning {
+        if controller?.isCancelled == true {
+            process.terminate()
+            process.waitUntilExit()
+            throw VideoToGifError.message("Conversion cancelled")
+        }
+
+        if controller?.isPaused == true {
+            if !sentStop {
+                kill(process.processIdentifier, SIGSTOP)
+                sentStop = true
+            }
+        } else if sentStop {
+            kill(process.processIdentifier, SIGCONT)
+            sentStop = false
+        }
+
+        Thread.sleep(forTimeInterval: 0.1)
+    }
 
     guard process.terminationStatus == 0 else {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: data, encoding: .utf8) ?? "Unknown ffmpeg error"
         throw VideoToGifError.message("ffmpeg failed: \(output)")
+    }
+}
+
+extension NSLock {
+    func withLock<T>(_ body: () -> T) -> T {
+        lock()
+        defer { unlock() }
+        return body()
     }
 }
 

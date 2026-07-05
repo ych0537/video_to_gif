@@ -21,6 +21,9 @@ struct ContentView: View {
     @State private var start = 0.0
     @State private var duration = 0.0
     @State private var isConverting = false
+    @State private var isPaused = false
+    @State private var conversionFinished = false
+    @State private var controller: ConversionController?
     @State private var progress = 0.0
     @State private var status = "Ready"
     @State private var logLines: [String] = []
@@ -53,18 +56,18 @@ struct ContentView: View {
             HStack(spacing: 12) {
                 label("Input")
                 pathField(inputURL?.path ?? "No video selected")
-                Button("Choose...") {
-                    chooseInput()
-                }
-                .disabled(isConverting)
+            Button("Choose...") {
+                chooseInput()
+            }
+            .disabled(isConverting)
             }
             HStack(spacing: 12) {
                 label("Output")
                 pathField(outputURL?.path ?? "No output selected")
-                Button("Save As...") {
-                    chooseOutput()
-                }
-                .disabled(isConverting || inputURL == nil)
+            Button("Save As...") {
+                chooseOutput()
+            }
+            .disabled(isConverting || inputURL == nil)
             }
         }
     }
@@ -153,6 +156,16 @@ struct ContentView: View {
 
             Spacer()
 
+            Button(isPaused ? "继续" : "暂停") {
+                togglePause()
+            }
+            .disabled(!isConverting || conversionFinished)
+
+            Button("中止") {
+                cancelConversion()
+            }
+            .disabled(!isConverting || conversionFinished)
+
             startButton
         }
     }
@@ -162,7 +175,7 @@ struct ContentView: View {
             convert()
         }
         .keyboardShortcut(.defaultAction)
-        .disabled(isConverting || inputURL == nil || outputURL == nil)
+        .disabled(isConverting || conversionFinished || inputURL == nil || outputURL == nil)
     }
 
     private func pathField(_ text: String) -> some View {
@@ -195,6 +208,9 @@ struct ContentView: View {
             status = "Ready"
             logLines.removeAll()
             progress = 0
+            isPaused = false
+            conversionFinished = false
+            controller = nil
         }
     }
 
@@ -222,13 +238,17 @@ struct ContentView: View {
         )
 
         isConverting = true
+        isPaused = false
+        conversionFinished = false
         progress = 0
         status = "Starting..."
         logLines.removeAll()
+        let activeController = ConversionController()
+        controller = activeController
 
         Task.detached {
             do {
-                try convertVideoToGif(options: options) { event in
+                try convertVideoToGif(options: options, controller: activeController) { event in
                     Task { @MainActor in
                         switch event {
                         case .message(let text):
@@ -244,14 +264,42 @@ struct ContentView: View {
                     progress = 1
                     status = "Done"
                     isConverting = false
+                    isPaused = false
+                    conversionFinished = true
+                    controller = nil
                 }
             } catch {
                 await MainActor.run {
                     status = String(describing: error)
                     logLines.append("Error: \(error)")
                     isConverting = false
+                    isPaused = false
+                    conversionFinished = true
+                    controller = nil
                 }
             }
         }
+    }
+
+    private func togglePause() {
+        guard let controller else {
+            return
+        }
+
+        if isPaused {
+            controller.resume()
+            isPaused = false
+            status = "Resuming..."
+        } else {
+            controller.pause()
+            isPaused = true
+            status = "Paused"
+        }
+    }
+
+    private func cancelConversion() {
+        controller?.cancel()
+        isPaused = false
+        status = "Cancelling..."
     }
 }
