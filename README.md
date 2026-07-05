@@ -21,13 +21,13 @@ bash scripts/package-app.sh
 アプリは次の場所に作成されます。
 
 ```sh
-dist/Video to GIF.app
+dist/Video2GIF.app
 ```
 
 Finder から開くか、次のコマンドで起動できます。
 
 ```sh
-open "dist/Video to GIF.app"
+open "dist/Video2GIF.app"
 ```
 
 ## CLI をビルド

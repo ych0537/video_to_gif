@@ -39,7 +39,7 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Video to GIF")
+            Text("Video2GIF")
                 .font(.system(size: 28, weight: .semibold))
             Text("Convert local videos under 50 MB into shareable GIFs.")
                 .foregroundStyle(.secondary)
