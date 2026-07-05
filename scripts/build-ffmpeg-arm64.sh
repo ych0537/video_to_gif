@@ -47,7 +47,7 @@ make distclean >/dev/null 2>&1 || true
   --enable-avfilter \
   --enable-swscale \
   --enable-protocol=file,pipe \
-  --enable-demuxer=mov,matroska,avi,flv,asf,mpegts,mpegvideo \
+  --enable-demuxer=mov,matroska,avi,flv,asf,mpegts,mpegvideo,image2 \
   --enable-muxer=gif,image2 \
   --enable-decoder=h264,hevc,mpeg4,mpegvideo,msmpeg4v1,msmpeg4v2,msmpeg4v3,wmv1,wmv2,wmv3,vc1,flv,vp8,vp9,av1,prores,qtrle,png \
   --enable-parser=h264,hevc,mpeg4video,mpegvideo,vp8,vp9,av1 \
