@@ -38,11 +38,16 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Video2GIF")
-                .font(.system(size: 28, weight: .semibold))
-            Text("Convert local videos up to 1 GB into shareable GIFs.")
-                .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Video2GIF")
+                    .font(.system(size: 28, weight: .semibold))
+                Text("Convert local videos up to 1 GB into shareable GIFs.")
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            startButton
+                .controlSize(.large)
         }
     }
 
@@ -151,12 +156,16 @@ struct ContentView: View {
 
             Spacer()
 
-            Button(isConverting ? "处理中..." : "开始") {
-                convert()
-            }
-            .keyboardShortcut(.defaultAction)
-            .disabled(isConverting || inputURL == nil || outputURL == nil)
+            startButton
         }
+    }
+
+    private var startButton: some View {
+        Button(isConverting ? "处理中..." : "开始") {
+            convert()
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(isConverting || inputURL == nil || outputURL == nil)
     }
 
     private func pathField(_ text: String) -> some View {
