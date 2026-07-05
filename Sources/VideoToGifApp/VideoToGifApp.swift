@@ -81,7 +81,9 @@ struct ContentView: View {
                         Text("\(value) px").tag(value)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
+                .frame(width: 120, alignment: .leading)
+                Spacer()
             }
             HStack(spacing: 12) {
                 label("FPS")

@@ -10,9 +10,15 @@ mp4, mov, webm, mkv, avi, flv, wmv, m4v, 3gp
 
 入力ファイルは 1 GB 以下に制限しています。
 
-すべての対応形式を安定して扱うには、`ffmpeg` をインストールして `PATH` から実行できる状態にしてください。`ffmpeg` が見つからない場合は macOS 標準の動画デコードにフォールバックします。この場合、主に `mp4`, `mov`, `m4v`, `3gp` などが対象になります。
+macOS アプリには Apple Silicon (`arm64`) 向けに最小構成でビルドした `ffmpeg` を同梱しています。対象は M1 以降の MacBook です。CLI は同梱 `ffmpeg` がない場合、`PATH` 上の `ffmpeg` を探し、それも見つからない場合は macOS 標準の動画デコードにフォールバックします。
 
 ## macOS アプリをビルド
+
+初回、または `ffmpeg` を更新したい場合は、先に Apple Silicon 用の最小構成 `ffmpeg` をビルドします。
+
+```sh
+bash scripts/build-ffmpeg-arm64.sh
+```
 
 ```sh
 bash scripts/package-app.sh
@@ -51,7 +57,7 @@ swift build -c release
 調整できるパラメータ:
 
 ```sh
---width <pixels>      160, 240, 320, 360, 480, 640, 800 のいずれか。デフォルト: 800
+--width <pixels>      160, 240, 320, 360, 480, 640, 800, 1024, 1280, 1440, 1600, 1920 のいずれか。デフォルト: 800
 --fps <value>         5, 10, 15, 20, 24, 30 のいずれか。デフォルト: 10
 --start <seconds>     変換開始秒。0.5 秒単位で指定できます。デフォルト: 0
 --duration <seconds>  切り出す長さ。0 は開始位置から最後まで。デフォルト: 0

@@ -9,7 +9,7 @@ func printUsage() {
       video-to-gif <input-video> [output.gif] [options]
 
     Options:
-      --width <pixels>      Max output width: 160, 240, 320, 360, 480, 640, 800. Default: 800
+      --width <pixels>      Max output width: 160, 240, 320, 360, 480, 640, 800, 1024, 1280, 1440, 1600, 1920. Default: 800
       --fps <value>         Frames per second: 5, 10, 15, 20, 24, 30. Default: 10
       --start <seconds>     Start time in seconds, with 0.5s precision. Default: 0
       --duration <seconds>  Clip duration in seconds. 0 means full remaining video. Default: 0

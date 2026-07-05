@@ -88,7 +88,7 @@ public final class ConversionController: @unchecked Sendable {
 
 public let maxInputBytes: UInt64 = 1_024 * 1024 * 1024
 public let supportedExtensions = Set(["mp4", "mov", "webm", "mkv", "avi", "flv", "wmv", "m4v", "3gp"])
-public let allowedWidths = [160, 240, 320, 360, 480, 640, 800]
+public let allowedWidths = [160, 240, 320, 360, 480, 640, 800, 1024, 1280, 1440, 1600, 1920]
 public let allowedFPS = [5, 10, 15, 20, 24, 30]
 
 public func defaultOutputPath(for input: String) -> String {
@@ -372,6 +372,11 @@ extension NSLock {
 }
 
 func findExecutable(named name: String) -> String? {
+    if let bundledPath = Bundle.main.resourceURL?.appendingPathComponent(name).path,
+       FileManager.default.isExecutableFile(atPath: bundledPath) {
+        return bundledPath
+    }
+
     let pathCandidates = (ProcessInfo.processInfo.environment["PATH"] ?? "")
         .split(separator: ":")
         .map(String.init)
