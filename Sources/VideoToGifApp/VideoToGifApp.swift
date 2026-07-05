@@ -6,7 +6,7 @@ import VideoToGifCore
 @main
 struct VideoToGifMacApp: App {
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Video2GIF") {
             ContentView()
                 .frame(minWidth: 560, minHeight: 420)
         }
@@ -41,7 +41,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Video2GIF")
                 .font(.system(size: 28, weight: .semibold))
-            Text("Convert local videos under 50 MB into shareable GIFs.")
+            Text("Convert local videos up to 1 GB into shareable GIFs.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -151,7 +151,7 @@ struct ContentView: View {
 
             Spacer()
 
-            Button(isConverting ? "Converting..." : "Convert") {
+            Button(isConverting ? "处理中..." : "开始") {
                 convert()
             }
             .keyboardShortcut(.defaultAction)

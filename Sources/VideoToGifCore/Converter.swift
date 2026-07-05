@@ -38,7 +38,7 @@ public enum VideoToGifError: Error, CustomStringConvertible, Sendable {
     }
 }
 
-public let maxInputBytes: UInt64 = 50 * 1024 * 1024
+public let maxInputBytes: UInt64 = 1_024 * 1024 * 1024
 public let supportedExtensions = Set(["mp4", "mov", "webm", "mkv", "avi", "flv", "wmv", "m4v", "3gp"])
 public let allowedWidths = [160, 240, 320, 360, 480, 640, 800]
 public let allowedFPS = [5, 10, 15, 20, 24, 30]
