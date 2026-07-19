@@ -144,14 +144,22 @@ public func convertVideoToGif(
 
     let inputURL = URL(fileURLWithPath: options.input)
     let outputURL = URL(fileURLWithPath: options.output)
-
-    if let ffmpegPath = findExecutable(named: "ffmpeg") {
-        try convertVideoToGifWithFFmpeg(options: options, ffmpegPath: ffmpegPath, inputURL: inputURL, outputURL: outputURL, controller: controller, progress: progress)
-        return
+    let temporaryOutputURL = outputURL.deletingLastPathComponent()
+        .appendingPathComponent(".\(outputURL.deletingPathExtension().lastPathComponent)-\(UUID().uuidString).tmp.gif")
+    defer {
+        try? FileManager.default.removeItem(at: temporaryOutputURL)
     }
 
-    progress(.message("ffmpeg not found; using macOS native video reader. Some formats such as webm, mkv, flv, and wmv may require ffmpeg."))
-    try convertVideoToGifWithAVFoundation(options: options, inputURL: inputURL, outputURL: outputURL, controller: controller, progress: progress)
+    if let ffmpegPath = findExecutable(named: "ffmpeg") {
+        try convertVideoToGifWithFFmpeg(options: options, ffmpegPath: ffmpegPath, inputURL: inputURL, outputURL: temporaryOutputURL, controller: controller, progress: progress)
+    } else {
+        progress(.message("ffmpeg not found; using macOS native video reader. Some formats such as webm, mkv, flv, and wmv may require ffmpeg."))
+        try convertVideoToGifWithAVFoundation(options: options, inputURL: inputURL, outputURL: temporaryOutputURL, controller: controller, progress: progress)
+    }
+
+    guard rename(temporaryOutputURL.path, outputURL.path) == 0 else {
+        throw VideoToGifError.message("Could not replace output file at \(outputURL.path): \(String(cString: strerror(errno)))")
+    }
 }
 
 func resizedImage(_ image: CGImage, maxWidth: Int) throws -> CGImage {
@@ -238,9 +246,10 @@ func convertVideoToGifWithAVFoundation(
     ]
 
     progress(.message("Input: \(inputURL.path)"))
-    progress(.message("Output: \(outputURL.path)"))
+    progress(.message("Output: \(options.output)"))
     progress(.message("Settings: \(options.width) px, \(options.fps) fps, start \(String(format: "%.1f", options.start))s, duration \(String(format: "%.2f", clipDuration))s"))
 
+    var successfulFrameCount = 0
     for frameIndex in 0..<frameCount {
         try controller?.waitIfPaused()
         autoreleasepool {
@@ -251,16 +260,20 @@ func convertVideoToGifWithAVFoundation(
                 let cgImage = try generator.copyCGImage(at: time, actualTime: nil)
                 let outputImage = try resizedImage(cgImage, maxWidth: options.width)
                 CGImageDestinationAddImage(destination, outputImage, frameProperties as CFDictionary)
-
-                let completed = frameIndex + 1
-                progress(.fraction(Double(completed) / Double(frameCount)))
-                if completed == frameCount || completed % max(1, frameCount / 10) == 0 {
-                    progress(.message("Progress: \(completed)/\(frameCount) frames"))
-                }
+                successfulFrameCount += 1
             } catch {
                 progress(.message("Failed to process frame \(frameIndex + 1): \(error)"))
             }
         }
+        let completed = frameIndex + 1
+        progress(.fraction(Double(completed) / Double(frameCount)))
+        if completed == frameCount || completed % max(1, frameCount / 10) == 0 {
+            progress(.message("Progress: \(completed)/\(frameCount) frames"))
+        }
+    }
+
+    guard successfulFrameCount > 0 else {
+        throw VideoToGifError.message("Could not decode any video frames")
     }
 
     guard CGImageDestinationFinalize(destination) else {
@@ -318,7 +331,7 @@ func convertVideoToGifWithFFmpeg(
     let outputAttributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
     let bytes = outputAttributes[.size] as? UInt64 ?? 0
     progress(.message("Input: \(inputURL.path)"))
-    progress(.message("Output: \(outputURL.path)"))
+    progress(.message("Output: \(options.output)"))
     progress(.message("Settings: \(options.width) px, \(options.fps) fps, start \(String(format: "%.1f", options.start))s, duration \(options.duration == 0 ? "full" : "\(formatSeconds(options.duration))s")"))
     progress(.fraction(1))
     progress(.message("Done: \(formatBytes(bytes))"))
@@ -330,17 +343,43 @@ func runProcess(executable: String, controller: ConversionController?, arguments
     process.arguments = arguments
 
     let pipe = Pipe()
-    process.standardOutput = pipe
+    process.standardOutput = FileHandle.nullDevice
     process.standardError = pipe
 
     try process.run()
 
+    let errorLock = NSLock()
+    var errorData = Data()
+    let errorReadGroup = DispatchGroup()
+    errorReadGroup.enter()
+    DispatchQueue.global(qos: .utility).async {
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        errorLock.withLock {
+            // Keep error messages useful without retaining an unbounded ffmpeg log.
+            errorData = Data(data.suffix(256 * 1024))
+        }
+        errorReadGroup.leave()
+    }
+
     var sentStop = false
+    var wasCancelled = false
     while process.isRunning {
         if controller?.isCancelled == true {
+            if sentStop {
+                kill(process.processIdentifier, SIGCONT)
+                sentStop = false
+            }
             process.terminate()
-            process.waitUntilExit()
-            throw VideoToGifError.message("Conversion cancelled")
+            wasCancelled = true
+
+            let deadline = Date().addingTimeInterval(2)
+            while process.isRunning, Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+            break
         }
 
         if controller?.isPaused == true {
@@ -356,8 +395,15 @@ func runProcess(executable: String, controller: ConversionController?, arguments
         Thread.sleep(forTimeInterval: 0.1)
     }
 
+    process.waitUntilExit()
+    errorReadGroup.wait()
+
+    if wasCancelled {
+        throw VideoToGifError.message("Conversion cancelled")
+    }
+
     guard process.terminationStatus == 0 else {
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let data = errorLock.withLock { errorData }
         let output = String(data: data, encoding: .utf8) ?? "Unknown ffmpeg error"
         throw VideoToGifError.message("ffmpeg failed: \(output)")
     }

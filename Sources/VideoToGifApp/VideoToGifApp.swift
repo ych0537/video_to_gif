@@ -22,7 +22,6 @@ struct ContentView: View {
     @State private var duration = 0.0
     @State private var isConverting = false
     @State private var isPaused = false
-    @State private var conversionFinished = false
     @State private var controller: ConversionController?
     @State private var progress = 0.0
     @State private var status = "Ready"
@@ -158,26 +157,26 @@ struct ContentView: View {
 
             Spacer()
 
-            Button(isPaused ? "继续" : "暂停") {
+            Button(isPaused ? "Resume" : "Pause") {
                 togglePause()
             }
-            .disabled(!isConverting || conversionFinished)
+            .disabled(!isConverting)
 
-            Button("中止") {
+            Button("Cancel") {
                 cancelConversion()
             }
-            .disabled(!isConverting || conversionFinished)
+            .disabled(!isConverting)
 
             startButton
         }
     }
 
     private var startButton: some View {
-        Button(isConverting ? "处理中..." : "开始") {
+        Button(isConverting ? "Converting..." : "Convert") {
             convert()
         }
         .keyboardShortcut(.defaultAction)
-        .disabled(isConverting || conversionFinished || inputURL == nil || outputURL == nil)
+        .disabled(isConverting || inputURL == nil || outputURL == nil)
     }
 
     private func pathField(_ text: String) -> some View {
@@ -211,7 +210,6 @@ struct ContentView: View {
             logLines.removeAll()
             progress = 0
             isPaused = false
-            conversionFinished = false
             controller = nil
         }
     }
@@ -241,7 +239,6 @@ struct ContentView: View {
 
         isConverting = true
         isPaused = false
-        conversionFinished = false
         progress = 0
         status = "Starting..."
         logLines.removeAll()
@@ -267,7 +264,6 @@ struct ContentView: View {
                     status = "Done"
                     isConverting = false
                     isPaused = false
-                    conversionFinished = true
                     controller = nil
                 }
             } catch {
@@ -276,7 +272,6 @@ struct ContentView: View {
                     logLines.append("Error: \(error)")
                     isConverting = false
                     isPaused = false
-                    conversionFinished = true
                     controller = nil
                 }
             }
